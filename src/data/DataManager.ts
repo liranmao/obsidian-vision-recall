@@ -325,7 +325,7 @@ export class DataManager extends Events {
       this.db.data.userData.list.push(entry.id); // Maintain order
     }
     this.db.data.userData.map[entry.id] = this.sanitizeForSaving(entry) as UserData;
-    this.addProcessedFileRecordAndHash(entry.id, { size: entry.size, mtime: entry.mtime, hash: entry.hash } as ProcessedFileRecord, entry.hash);
+    await this.addProcessedFileRecordAndHash(entry.id, { size: entry.size, mtime: entry.mtime, hash: entry.hash } as ProcessedFileRecord, entry.hash);
 
     // Recalculate tags whenever an entry is added or updated
     this.calculateTags();

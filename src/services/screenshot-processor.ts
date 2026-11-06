@@ -1,3 +1,4 @@
+import { isInInbox, link } from './topic-core';
 import { App, FileManager, Notice, TFile, TFolder, arrayBufferToBase64, normalizePath } from 'obsidian';
 import Tesseract, { createWorker, Worker } from 'tesseract.js';
 import { VisionRecallPluginSettings } from '@/types/settings-types';
@@ -538,7 +539,7 @@ export class ScreenshotProcessor {
         : 'Vision LLM context';
 
       // Main note content
-      const noteContent = `# Notes from screenshot: ${noteTitleBase}\n\n${generatedNotes}`;
+      const noteContent = `# Notes from screenshot: ${noteTitleBase}\n\n${generatedNotes}\n\n来源原图：${link(newScreenshotPath, "原图")}\n\n> AI 摘要，未经核实。仅依据截图可见内容，不代表已阅读完整论文或视频。`;
 
       const metadataContent = `\n\n---\n*Screenshot filename:* [[${newScreenshotPath}]]\n*${ocrTitle}*:\n\`\`\`\n${truncatedOcrText}...\n\`\`\`\n*${visionTitle}*:\n\`\`\`\n${truncatedVisionLLMResponse}...\n\`\`\`\n\n*Tags:* ${formattedTags}\n\n${uniqueTag}\n`;
 
@@ -612,7 +613,7 @@ export class ScreenshotProcessor {
         ...metadata,
       }
 
-      delete dataStoreEntry.generatedNotes;
+      // Retain summary for offline topic digests.
 
       if (this.progressManager.isStoppedByUser()) return;
       await this.app.vault.create(metadataPath, JSON.stringify(metadata, null, 2));
@@ -624,6 +625,7 @@ export class ScreenshotProcessor {
     } catch (error) {
       this.plugin.logger.error('Error saving screenshot or metadata:', error);
       new Notice('Error saving screenshot or metadata. See console for details.');
+      throw error; // Queue must retain the inbox original when archival fails.
     }
   }
 
@@ -865,7 +867,7 @@ export class ScreenshotProcessor {
 
     const files = allFiles.filter(file => {
       const ext = file.extension.toLowerCase();
-      return file.path.startsWith(normalizedIntakeDir) &&
+      return isInInbox(file.path, normalizedIntakeDir) &&
         IMAGE_EXTENSIONS.includes(ext);
     });
 

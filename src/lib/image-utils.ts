@@ -49,7 +49,7 @@ export async function shouldProcessImage(plugin: VisionRecallPlugin, file: TFile
   // 3. Check if the hash has already been processed.
   const processedHashes = plugin.dataManager.getProcessedHashes();
   plugin.logger.debug(`Checking if hash ${JSON.stringify(processedHashes, null, 2)} has already been processed.`);
-  if (processedHashes?.has(hash)) {
+  if (processedHashes?.has(hash) || plugin.dataManager.getAllEntries().some(entry => entry.hash === hash)) {
     // Update (or add) the record for this file path with the current metadata.
     // plugin.dataManager.addProcessedFileRecord(file.path, { size: stat.size, mtime: stat.mtime, hash });
     return false;

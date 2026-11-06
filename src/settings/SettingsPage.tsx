@@ -1,5 +1,6 @@
 import { getLanguagesForObsidianSettingsDropdown } from '@/lib/languages';
 import VisionRecallPlugin from '@/main';
+import { parseTopics, topicSuggestions } from '../services/topic-core';
 import { App, PluginSettingTab, Setting } from 'obsidian';
 
 export default class VisionRecallSettingTab extends PluginSettingTab {
@@ -25,6 +26,44 @@ export default class VisionRecallSettingTab extends PluginSettingTab {
       text: 'Currently in Beta',
       cls: 'vision-recall-intro-submessage'
     });
+
+    new Setting(containerEl).setName('知识主题与每日汇总').setHeading();
+    new Setting(containerEl).setName('我的主题').setDesc('每行一个：主题 | 关键词,别名。先由你指定；留空则归入待分类。例如：论文 | paper,research,论文')
+      .addTextArea(text => text.setValue(this.plugin.settings.knowledgeTopics).onChange(async value => {
+        this.plugin.settings.knowledgeTopics = value;
+        await this.plugin.saveSettings();
+      }));
+    new Setting(containerEl).setName('汇总文件夹').setDesc('相对 vault 根目录的完整路径。自动生成区会更新；手写内容请放在“我的思考”下。')
+      .addText(text => text.setValue(this.plugin.settings.topicDigestFolder).onChange(async value => {
+        this.plugin.settings.topicDigestFolder = value; await this.plugin.saveSettings();
+      }));
+    new Setting(containerEl).setName('自动更新每日汇总').setDesc('仅在桌面 Obsidian 开启且插件运行时，每分钟检查；重新开启后补齐历史日期。不额外调用 AI。')
+      .addToggle(toggle => toggle.setValue(this.plugin.settings.autoTopicDigests).onChange(async value => {
+        this.plugin.settings.autoTopicDigests = value; await this.plugin.saveSettings();
+      }));
+    new Setting(containerEl).setName('生成 / 更新汇总').addButton(button => button.setButtonText('立即生成').onClick(async () => {
+      await this.plugin.generateTopicDigests();
+    }));
+    new Setting(containerEl).setName('新主题建议').setDesc('来自已有 AI 标签，按去重截图数排序；接受前不会自动创建主题。保存主题后可刷新建议。')
+      .addButton(button => button.setButtonText('刷新').onClick(() => this.display()));
+    const suggestions = topicSuggestions(this.plugin.dataManager.getAllEntries(), parseTopics(this.plugin.settings.knowledgeTopics), this.plugin.settings.dismissedTopicSuggestions);
+    for (const item of suggestions) {
+      new Setting(containerEl).setName(item.name).setDesc(`${item.count} 张截图中的 AI 标签，需你确认含义。`)
+        .addButton(button => button.setButtonText('接受').onClick(async () => {
+          const topics = parseTopics(this.plugin.settings.knowledgeTopics);
+          if (!topics.some(t => t.name.toLowerCase() === item.name.toLowerCase()))
+            this.plugin.settings.knowledgeTopics = [this.plugin.settings.knowledgeTopics.trim(), item.name].filter(Boolean).join('\n');
+          await this.plugin.saveSettings(); this.display();
+        }))
+        .addButton(button => button.setButtonText('忽略').onClick(async () => {
+          this.plugin.settings.dismissedTopicSuggestions.push(item.name);
+          await this.plugin.saveSettings(); this.display();
+        }));
+    }
+    if (this.plugin.settings.dismissedTopicSuggestions.length) new Setting(containerEl).setName('已忽略的建议')
+      .addButton(button => button.setButtonText('恢复全部').onClick(async () => {
+        this.plugin.settings.dismissedTopicSuggestions = []; await this.plugin.saveSettings(); this.display();
+      }));
 
     new Setting(containerEl).setName('LLM').setHeading();
 

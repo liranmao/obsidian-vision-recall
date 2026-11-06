@@ -1,3 +1,5 @@
+> **本 fork 的中文工作流与试用说明：** [截图到长期知识库](docs/WORKFLOW.zh-CN.md)。新增用户主题、待接受的主题建议、可溯源的每日摘录汇总；仍为桌面插件，手机仅负责选图入箱。
+
 # Vision Recall — Screenshot Knowledge Base for Obsidian
 
 <p align="center">

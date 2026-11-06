@@ -1,6 +1,10 @@
 // options  | 'gemini' | 'claude' | 'groq' | 'azure'
 
 export interface VisionRecallPluginSettings {
+  knowledgeTopics: string;
+  dismissedTopicSuggestions: string[];
+  topicDigestFolder: string;
+  autoTopicDigests: boolean;
   llmProvider: 'openai' | 'ollama';
   apiKey: string;
   apiBaseUrl: string;
@@ -38,6 +42,10 @@ export interface VisionRecallPluginSettings {
 }
 
 export const DEFAULT_SETTINGS: VisionRecallPluginSettings = {
+  knowledgeTopics: '',
+  dismissedTopicSuggestions: [],
+  topicDigestFolder: 'VisionRecall/Daily',
+  autoTopicDigests: false,
   llmProvider: 'openai',
   apiKey: '',
   apiBaseUrl: '',

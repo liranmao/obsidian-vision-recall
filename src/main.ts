@@ -13,13 +13,15 @@ import { ProcessingQueueModal } from '@/components/modals/ProcessingQueueModal';
 import { saveBase64ImageInVault } from './lib/ingest';
 import { useQueueStore } from '@/stores/queueStore';
 import { StatusBarManager } from './lib/StatusBarManager';
-import { debounce } from 'obsidian';
-import { customParse } from './lib/json-utils';
+import { TopicDigestService } from './services/topic-digest-service';
+import { isInInbox } from './services/topic-core';
+import { customStringify, customParse } from './lib/json-utils';
 import { DefaultConfig } from './types/config-types';
 import { HelperService } from './services/helper-service';
 
 export default class VisionRecallPlugin extends Plugin {
 	settings: VisionRecallPluginSettings;
+	topicDigests: TopicDigestService;
 	screenshotProcessor: ScreenshotProcessor;
 	dataManager: DataManager;
 	logger: PluginLogger;
@@ -28,7 +30,6 @@ export default class VisionRecallPlugin extends Plugin {
 	helperService: HelperService;
 
 	metadata: any[] = [];
-	debouncedOnCreateHandler: (file: TAbstractFile) => void;
 
 	async onload() {
 		try {
@@ -43,7 +44,10 @@ export default class VisionRecallPlugin extends Plugin {
 
 			this.initializeUI();
 			await this.registerEventListeners();
+			this.topicDigests = new TopicDigestService(this);
 			this.registerCommands();
+			this.app.workspace.onLayoutReady(() => { if (this.settings.autoTopicDigests) void this.generateTopicDigests(); });
+			this.registerInterval(window.setInterval(() => { if (this.settings.autoTopicDigests) void this.generateTopicDigests(); }, 60000));
 			this.registerProtocolHandler();
 			await this.loadScreenshotMetadata();
 			this.logger.info('Plugin loaded successfully');
@@ -74,11 +78,8 @@ export default class VisionRecallPlugin extends Plugin {
 	}
 
 	private async registerEventListeners() {
-		// Debounce the file creation handler
-		this.debouncedOnCreateHandler = debounce(this.onFileCreated.bind(this), 500, true);
-
 		this.registerEvent(
-			this.app.vault.on('create', this.debouncedOnCreateHandler)
+			this.app.vault.on('create', file => { void this.onFileCreated(file).catch(error => this.logger.error('Inbox intake failed', error)); })
 		);
 
 		if (await this.periodicProcessingEnabled()) {
@@ -92,7 +93,7 @@ export default class VisionRecallPlugin extends Plugin {
 				return;
 			}
 
-			this.registerEvent(
+			this.registerInterval(
 				window.setInterval(
 					() => this.screenshotProcessor.processIntakeFolderAuto(),
 					interval
@@ -107,7 +108,14 @@ export default class VisionRecallPlugin extends Plugin {
 		)
 	}
 
+	async generateTopicDigests() {
+		try { const count = await this.topicDigests.generate(); if (count) new Notice(`已更新 ${count} 份每日主题汇总`); }
+		catch (error) { this.logger.error('每日汇总失败', error); new Notice(`每日汇总失败：${error.message}`); }
+	}
+
 	private registerCommands() {
+		this.addCommand({ id: 'generate-topic-digests', name: '生成 / 更新每日主题汇总', callback: () => this.generateTopicDigests() });
+		this.addCommand({ id: 'process-selected-inbox', name: '处理已选入 Inbox 的截图', callback: () => this.screenshotProcessor.processIntakeFolderAuto() });
 		this.addCommand({
 			id: 'open-main-view',
 			name: 'Open main view',
@@ -207,7 +215,7 @@ export default class VisionRecallPlugin extends Plugin {
 		if (!IMAGE_EXTENSIONS.includes(ext)) return;
 
 		const screenshotIntakeFolderPath = await this.getFolderFromSettingsKey('screenshotIntakeFolderPath');
-		if (!file.path.startsWith(screenshotIntakeFolderPath)) return;
+		if (!isInInbox(file.path, screenshotIntakeFolderPath)) return;
 
 		if (await shouldProcessImage(this, file)) {
 			this.logger.info(`Processing new image: ${file.path}`);
@@ -267,7 +275,7 @@ export default class VisionRecallPlugin extends Plugin {
 		};
 
 		// Save the merged data
-		await this.saveData(mergedData);
+		await this.saveData(customStringify(mergedData));
 	}
 
 	async loadScreenshotMetadata(): Promise<void> {
